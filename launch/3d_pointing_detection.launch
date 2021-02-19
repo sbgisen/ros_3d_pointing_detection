@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<launch>
+    <arg name="persons" default="/pose_estimator/pose" />
+    <arg name="darknet" default="/darknet_ros/bounding_boxes" />
+    <arg name="points" default="/realsense_front/depth_registered/points" />
+    <arg name="camera_info" default="/realsense_front/color/camera_info" />
+
+    <node pkg="ros_3d_pointing_detection" type="3d_pointing_detection.py" name="pointing_detector" output="screen">
+        <remap from="~persons" to="$(arg persons)" />
+        <remap from="~darknet" to="$(arg darknet)" />
+        <remap from="~points" to="$(arg points)" />
+        <remap from="~camera_info" to="$(arg camera_info)" />
+    </node>
+
+    <!-- Config and weights folder. -->
+    <arg name="yolo_weights_path" default="$(find darknet_ros)/yolo_network_config/weights" />
+    <arg name="yolo_config_path" default="$(find darknet_ros)/yolo_network_config/cfg" />
+
+    <!-- ROS and network parameter files -->
+    <arg name="ros_param_file" default="$(find darknet_ros)/config/ros.yaml" />
+    <arg name="network_param_file" default="$(find darknet_ros)/config/yolov3-tiny.yaml" />
+
+    <!-- Load parameters -->
+    <rosparam command="load" ns="darknet_ros" file="$(arg ros_param_file)" />
+    <rosparam command="load" ns="darknet_ros" file="$(arg network_param_file)" />
+
+    <!-- Start darknet and ros wrapper -->
+    <node pkg="darknet_ros" type="darknet_ros" name="darknet_ros" output="screen" respawn="true">
+        <param name="weights_path" value="$(arg yolo_weights_path)" />
+        <param name="config_path" value="$(arg yolo_config_path)" />
+        <remap from="/camera/color/image_raw" to="/realsense_front/color/image_rect_color" />
+    </node>
+</launch>

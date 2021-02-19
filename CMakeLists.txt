@@ -14,3 +14,10 @@ catkin_package(CATKIN_DEPENDS message_runtime) # declares dependencies for packa
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )
+
+catkin_python_setup()
+
+catkin_install_python(PROGRAMS
+  scripts/3d_pointing_detection.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
