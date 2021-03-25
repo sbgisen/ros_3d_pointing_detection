@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from geometry_msgs.msg import Pose
 from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance, point_plane_distance
 from tfpose_ros.msg import Persons
-from std_msgs.msg import String
 from sensor_msgs.msg import PointCloud2, CameraInfo
 from sensor_msgs import point_cloud2
 import numpy as np
 
-from darknet_ros_msgs.msg import BoundingBoxes, BoundingBox
+from darknet_ros_msgs.msg import BoundingBoxes
 import message_filters
 import rospy
+from ros_3d_pointing_detection.msg import DetectedObject
 
 
 class PointingDetector3D(object):
@@ -25,7 +26,7 @@ class PointingDetector3D(object):
             [self._persons_sub, self._darknet_sub, self._points_sub, self._camera_info_sub], 10, 1)
         self._sub.registerCallback(self._callback)
 
-        self.__pub = rospy.Publisher('~detect_object', String, queue_size=10)
+        self.__pub = rospy.Publisher('~detect_object', DetectedObject, queue_size=10)
 
     def _callback(self, persons_msg, darknet_msg, points_msg, camera_info_msg):
         if not persons_msg.persons:
@@ -55,7 +56,11 @@ class PointingDetector3D(object):
             xmax = xmin + bbox.w
             ymax = ymin + bbox.h
             if hit_point_2d[0] >= xmin and hit_point_2d[0] <= xmax and hit_point_2d[1] >= ymin and hit_point_2d[1] <= ymax:
-                self.__pub.publish(String(data=bbox.Class))
+                pose = Pose()
+                pose.position.x = hit_point[0]
+                pose.position.y = hit_point[1]
+                pose.position.z = hit_point[2]
+                self.__pub.publish(DetectedObject(header=points_msg.header, id=bbox.Class, pose=pose))
 
     def right_arm_joints(self, person, points):
         p0 = p1 = p2 = None
