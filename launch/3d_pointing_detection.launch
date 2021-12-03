@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <launch>
-    <arg name="front_camera" default="realsense_front" />
-    <arg name="persons" default="/pose_estimator/pose" />
-    <arg name="darknet" default="/$(arg front_camera)/darknet_ros/bounding_boxes" />
-    <arg name="points" default="/$(arg front_camera)/depth_registered/points" />
-    <arg name="camera_info" default="/$(arg front_camera)/color/camera_info" />
+  <arg name="persons" default="/pose_estimator/pose"/>
+  <arg name="objects" default="/primitive_shape_classifier/euclidean_segmentation_decomposer/boxes"/>
+  <arg name="points" default="/primitive_shape_classifier/bilateral_filter/output"/>
 
-    <node pkg="ros_3d_pointing_detection" type="3d_pointing_detection.py" name="pointing_detector" output="screen">
-        <remap from="~persons" to="$(arg persons)" />
-        <remap from="~darknet" to="$(arg darknet)" />
-        <remap from="~points" to="$(arg points)" />
-        <remap from="~camera_info" to="$(arg camera_info)" />
-    </node>
+  <node pkg="ros_3d_pointing_detection" type="3d_pointing_detection.py" name="pointing_detector" output="screen">
+    <remap from="~persons" to="$(arg persons)"/>
+    <remap from="~objects" to="$(arg objects)"/>
+    <remap from="~points" to="$(arg points)"/>
+  </node>
 </launch>

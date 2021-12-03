@@ -8,7 +8,7 @@ from sensor_msgs.msg import PointCloud2, CameraInfo
 from sensor_msgs import point_cloud2
 import numpy as np
 
-from darknet_ros_msgs.msg import BoundingBoxes
+from jsk_recognition_msgs.msg import BoundingBoxArray
 import message_filters
 import rospy
 from ros_3d_pointing_detection.msg import DetectedObject
@@ -19,16 +19,15 @@ class PointingDetector3D(object):
         rospy.init_node('3d_pointing_detector')
 
         self._persons_sub = message_filters.Subscriber("~persons", Persons)
-        self._darknet_sub = message_filters.Subscriber("~darknet", BoundingBoxes)
+        self._objects_sub = message_filters.Subscriber("~objects", BoundingBoxArray)
         self._points_sub = message_filters.Subscriber("~points", PointCloud2)
-        self._camera_info_sub = message_filters.Subscriber('~camera_info', CameraInfo)
         self._sub = message_filters.ApproximateTimeSynchronizer(
-            [self._persons_sub, self._darknet_sub, self._points_sub, self._camera_info_sub], 10, 1)
+            [self._persons_sub, self._objects_sub, self._points_sub], 10, 1)
         self._sub.registerCallback(self._callback)
 
         self.__pub = rospy.Publisher('~detect_object', DetectedObject, queue_size=10)
 
-    def _callback(self, persons_msg, darknet_msg, points_msg, camera_info_msg):
+    def _callback(self, persons_msg, objects_msg, points_msg):
         if not persons_msg.persons:
             return
 
@@ -38,29 +37,47 @@ class PointingDetector3D(object):
         right_arm_joints = self.right_arm_joints(persons_msg.persons[0], points_mat)
 
         if right_arm_joints is None:
+            rospy.loginfo("not found right arm")
             return
 
         if not self.is_arm_stretched(right_arm_joints):
+            rospy.loginfo("not stretched")
             return
 
         is_hit, hit_point = self.get_3d_ray_hit_point(right_arm_joints, points)
 
         if not is_hit:
+            rospy.loginfo("not hit")
             return
 
-        hit_point_2d = self.cam2pixel(hit_point, np.array(camera_info_msg.K).reshape([3, 3]))
+        min_dist = 0.5
+        min_box = None
+        for box in objects_msg.boxes:
+            origin = np.array([box.pose.position.x, box.pose.position.y, box.pose.position.z])
+            dist = np.linalg.norm(origin - hit_point)
+            if dist < min_dist:
+                min_dist = dist
+                min_box = box
+        if min_box is not None:
+            self.__pub.publish(
+                DetectedObject(
+                    header=min_box.header,
+                    id="",
+                    pose=min_box.pose,
+                    dimensions=min_box.dimensions))
 
-        for bbox in darknet_msg.bounding_boxes:
-            xmin = bbox.x
-            ymin = bbox.y
-            xmax = xmin + bbox.w
-            ymax = ymin + bbox.h
-            if hit_point_2d[0] >= xmin and hit_point_2d[0] <= xmax and hit_point_2d[1] >= ymin and hit_point_2d[1] <= ymax:
-                pose = Pose()
-                pose.position.x = hit_point[0]
-                pose.position.y = hit_point[1]
-                pose.position.z = hit_point[2]
-                self.__pub.publish(DetectedObject(header=points_msg.header, id=bbox.Class, pose=pose))
+        # hit_point_2d = self.cam2pixel(hit_point, np.array(camera_info_msg.K).reshape([3, 3]))
+        # for bbox in darknet_msg.bounding_boxes:
+        #     xmin = bbox.x
+        #     ymin = bbox.y
+        #     xmax = xmin + bbox.w
+        #     ymax = ymin + bbox.h
+        #     if hit_point_2d[0] >= xmin and hit_point_2d[0] <= xmax and hit_point_2d[1] >= ymin and hit_point_2d[1] <= ymax:
+        #         pose = Pose()
+        #         pose.position.x = hit_point[0]
+        #         pose.position.y = hit_point[1]
+        #         pose.position.z = hit_point[2]
+        #         self.__pub.publish(DetectedObject(header=points_msg.header, id=bbox.Class, pose=pose))
 
     def right_arm_joints(self, person, points):
         p0 = p1 = p2 = None
