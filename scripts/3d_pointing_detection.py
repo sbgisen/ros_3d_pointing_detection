@@ -33,8 +33,7 @@ class PointingDetector3D(object):
 
         points_list = list(point_cloud2.read_points(points_msg, field_names=("x", "y", "z")))
         points = np.array(points_list)
-        points_mat = points.reshape([points_msg.height, points_msg.width, 3])
-        right_arm_joints = self.right_arm_joints(persons_msg.persons[0], points_mat)
+        right_arm_joints = self.right_arm_joints(persons_msg.persons[0])
 
         if right_arm_joints is None:
             rospy.loginfo("not found right arm")
@@ -79,16 +78,15 @@ class PointingDetector3D(object):
         #         pose.position.z = hit_point[2]
         #         self.__pub.publish(DetectedObject(header=points_msg.header, id=bbox.Class, pose=pose))
 
-    def right_arm_joints(self, person, points):
+    def right_arm_joints(self, person):
         p0 = p1 = p2 = None
-        image_h, image_w = points.shape[:2]
         for part in person.body_part:
             if part.part_id == 2:
-                p0 = points[int(part.y * image_h + 0.5), int(part.x * image_w + 0.5)]
+                p0 = np.array([part.x, part.y, part.z])
             elif part.part_id == 3:
-                p1 = points[int(part.y * image_h + 0.5), int(part.x * image_w + 0.5)]
+                p1 = np.array([part.x, part.y, part.z])
             elif part.part_id == 4:
-                p2 = points[int(part.y * image_h + 0.5), int(part.x * image_w + 0.5)]
+                p2 = np.array([part.x, part.y, part.z])
         if p0 is None or p1 is None or p2 is None:
             return None
         return (p0, p1, p2)

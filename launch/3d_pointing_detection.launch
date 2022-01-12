@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <launch>
-  <arg name="persons" default="/pose_estimator/pose"/>
+  <arg name="persons" default="/pose_estimator/persons"/>
   <arg name="objects" default="/primitive_shape_classifier/euclidean_segmentation_decomposer/boxes"/>
   <arg name="points" default="/primitive_shape_classifier/bilateral_filter/output"/>
 
