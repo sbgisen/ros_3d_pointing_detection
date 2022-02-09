@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from geometry_msgs.msg import Pose
 from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance, point_plane_distance
 from tfpose_ros.msg import Persons
-from sensor_msgs.msg import PointCloud2, CameraInfo
+from sensor_msgs.msg import PointCloud2
 from sensor_msgs import point_cloud2
 import numpy as np
 
-from jsk_recognition_msgs.msg import BoundingBoxArray
+from jsk_recognition_msgs.msg import BoundingBoxArray, ClassificationResult
 import message_filters
 import rospy
 from ros_3d_pointing_detection.msg import DetectedObject
@@ -26,6 +25,7 @@ class PointingDetector3D(object):
         self._sub.registerCallback(self._callback)
 
         self.__pub = rospy.Publisher('~detect_object', DetectedObject, queue_size=10)
+        self.__result_pub = rospy.Publisher('~result', ClassificationResult, queue_size=10)
 
     def _callback(self, persons_msg, objects_msg, points_msg):
         if not persons_msg.persons:
@@ -51,12 +51,17 @@ class PointingDetector3D(object):
 
         min_dist = 0.5
         min_box = None
-        for box in objects_msg.boxes:
+        result = ClassificationResult()
+        result.header = objects_msg.header
+        for i, box in enumerate(objects_msg.boxes):
             origin = np.array([box.pose.position.x, box.pose.position.y, box.pose.position.z])
             dist = np.linalg.norm(origin - hit_point)
             if dist < min_dist:
                 min_dist = dist
                 min_box = box
+                result.label_names.append('pointing_object')
+            else:
+                result.label_names.append('')
         if min_box is not None:
             self.__pub.publish(
                 DetectedObject(
@@ -64,6 +69,8 @@ class PointingDetector3D(object):
                     id="",
                     pose=min_box.pose,
                     dimensions=min_box.dimensions))
+
+        self.__result_pub.publish(result)
 
         # hit_point_2d = self.cam2pixel(hit_point, np.array(camera_info_msg.K).reshape([3, 3]))
         # for bbox in darknet_msg.bounding_boxes:
