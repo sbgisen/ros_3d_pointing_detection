@@ -1,15 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance, point_plane_distance
-from tfpose_ros.msg import Persons
-from sensor_msgs.msg import PointCloud2
-from sensor_msgs import point_cloud2
-import numpy as np
-
-from jsk_recognition_msgs.msg import BoundingBoxArray, ClassificationResult
 import message_filters
+import numpy as np
 import rospy
+import tf
+from geometry_msgs.msg import Point
+from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Quaternion
+from jsk_recognition_msgs.msg import BoundingBoxArray
+from jsk_recognition_msgs.msg import ClassificationResult
+from sensor_msgs import point_cloud2
+from sensor_msgs.msg import PointCloud2
+from tfpose_ros.msg import Persons
+
+from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance
+from ros_3d_pointing_detection.calc_3d_dist import point_plane_distance
 from ros_3d_pointing_detection.msg import DetectedObject
 
 
@@ -49,6 +55,17 @@ class PointingDetector3D(object):
             rospy.loginfo("not hit")
             return
 
+        line = right_arm_joints[2] - right_arm_joints[0]
+        base = np.array([1, 0, 0])
+        axis = np.cross(base, line)
+        angle = np.arccos(np.dot(base, line))
+        q = tf.transformations.quaternion_about_axis(angle, tuple(axis))
+        pointing_pose = PoseStamped()
+        pointing_pose.header = persons_msg.header
+        pointing_pose.pose.position = Point(right_arm_joints[0][0], right_arm_joints[0][1], right_arm_joints[0][2])
+        pointing_pose.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
+        self.__pose_pub.publish(pointing_pose)
+
         min_dist = 0.5
         min_box = None
         result = ClassificationResult()
@@ -71,19 +88,6 @@ class PointingDetector3D(object):
                     dimensions=min_box.dimensions))
 
         self.__result_pub.publish(result)
-
-        # hit_point_2d = self.cam2pixel(hit_point, np.array(camera_info_msg.K).reshape([3, 3]))
-        # for bbox in darknet_msg.bounding_boxes:
-        #     xmin = bbox.x
-        #     ymin = bbox.y
-        #     xmax = xmin + bbox.w
-        #     ymax = ymin + bbox.h
-        #     if hit_point_2d[0] >= xmin and hit_point_2d[0] <= xmax and hit_point_2d[1] >= ymin and hit_point_2d[1] <= ymax:
-        #         pose = Pose()
-        #         pose.position.x = hit_point[0]
-        #         pose.position.y = hit_point[1]
-        #         pose.position.z = hit_point[2]
-        #         self.__pub.publish(DetectedObject(header=points_msg.header, id=bbox.Class, pose=pose))
 
     def right_arm_joints(self, person):
         p0 = p1 = p2 = None
