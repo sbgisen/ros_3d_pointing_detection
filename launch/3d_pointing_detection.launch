@@ -3,11 +3,9 @@
 <launch>
   <arg name="persons" default="/pose_estimator/persons"/>
   <arg name="objects" default="/jsk_pcl_utils/euclidean_segmentation_decomposer/boxes"/>
-  <arg name="points" default="/jsk_pcl_utils/bilateral_filter/output"/>
 
   <node pkg="ros_3d_pointing_detection" type="3d_pointing_detection.py" name="pointing_detector" output="screen">
     <remap from="~persons" to="$(arg persons)"/>
     <remap from="~objects" to="$(arg objects)"/>
-    <remap from="~points" to="$(arg points)"/>
   </node>
 </launch>

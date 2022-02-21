@@ -10,8 +10,6 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Quaternion
 from jsk_recognition_msgs.msg import BoundingBoxArray
 from jsk_recognition_msgs.msg import ClassificationResult
-from sensor_msgs import point_cloud2
-from sensor_msgs.msg import PointCloud2
 from tfpose_ros.msg import Persons
 
 from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance
@@ -25,20 +23,18 @@ class PointingDetector3D(object):
 
         self._persons_sub = message_filters.Subscriber("~persons", Persons)
         self._objects_sub = message_filters.Subscriber("~objects", BoundingBoxArray)
-        self._points_sub = message_filters.Subscriber("~points", PointCloud2)
         self._sub = message_filters.ApproximateTimeSynchronizer(
-            [self._persons_sub, self._objects_sub, self._points_sub], 10, 1)
+            [self._persons_sub, self._objects_sub], 10, 1)
         self._sub.registerCallback(self._callback)
 
         self.__pub = rospy.Publisher('~detect_object', DetectedObject, queue_size=10)
+        self.__pose_pub = rospy.Publisher('~pose', PoseStamped, queue_size=10)
         self.__result_pub = rospy.Publisher('~result', ClassificationResult, queue_size=10)
 
-    def _callback(self, persons_msg, objects_msg, points_msg):
+    def _callback(self, persons_msg, objects_msg):
         if not persons_msg.persons:
             return
 
-        points_list = list(point_cloud2.read_points(points_msg, field_names=("x", "y", "z")))
-        points = np.array(points_list)
         right_arm_joints = self.right_arm_joints(persons_msg.persons[0])
 
         if right_arm_joints is None:
@@ -47,12 +43,6 @@ class PointingDetector3D(object):
 
         if not self.is_arm_stretched(right_arm_joints):
             rospy.loginfo("not stretched")
-            return
-
-        is_hit, hit_point = self.get_3d_ray_hit_point(right_arm_joints, points)
-
-        if not is_hit:
-            rospy.loginfo("not hit")
             return
 
         line = right_arm_joints[2] - right_arm_joints[0]
@@ -66,17 +56,33 @@ class PointingDetector3D(object):
         pointing_pose.pose.orientation = Quaternion(q[0], q[1], q[2], q[3])
         self.__pose_pub.publish(pointing_pose)
 
-        min_dist = 0.5
+        min_dist = 1.5
         min_box = None
         result = ClassificationResult()
         result.header = objects_msg.header
         for i, box in enumerate(objects_msg.boxes):
             origin = np.array([box.pose.position.x, box.pose.position.y, box.pose.position.z])
-            dist = np.linalg.norm(origin - hit_point)
-            if dist < min_dist:
-                min_dist = dist
-                min_box = box
-                result.label_names.append('pointing_object')
+            closest = self.closest_point(origin, right_arm_joints[0], right_arm_joints[2])
+            if np.isnan(closest).any():
+                continue
+            mat = tf.transformations.quaternion_matrix([box.pose.orientation.x,
+                                                        box.pose.orientation.y,
+                                                        box.pose.orientation.z,
+                                                        box.pose.orientation.w])
+            mat[0:3, -1] = origin
+            mat = np.linalg.inv(mat)
+            offset = np.matrix(np.append(closest, [1])).T
+            offset_position = np.abs(np.array(mat * offset)[:3])
+            # if inside
+            if offset_position[0] < box.dimensions.x / 2 and offset_position[1] < box.dimensions.y / \
+                    2 and offset_position[2] < box.dimensions.z / 2:
+                dist = np.linalg.norm(offset_position)
+                if dist < min_dist:
+                    min_dist = dist
+                    min_box = box
+                    result.label_names.append('pointing_object')
+                else:
+                    result.label_names.append('')
             else:
                 result.label_names.append('')
         if min_box is not None:
@@ -88,6 +94,15 @@ class PointingDetector3D(object):
                     dimensions=min_box.dimensions))
 
         self.__result_pub.publish(result)
+
+    def closest_point(self, p, a, b):
+        s = b - a
+        s /= np.linalg.norm(s)
+        w = p - a
+        ps = np.dot(w, s)
+        if ps <= 0:
+            return np.array([np.nan] * 3)
+        return a + ps * s
 
     def right_arm_joints(self, person):
         p0 = p1 = p2 = None
