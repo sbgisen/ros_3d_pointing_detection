@@ -10,7 +10,7 @@ from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Quaternion
 from jsk_recognition_msgs.msg import BoundingBoxArray
 from jsk_recognition_msgs.msg import ClassificationResult
-from tfpose_ros.msg import Persons
+from jsk_recognition_msgs.msg import PeoplePoseArray
 
 from ros_3d_pointing_detection.calc_3d_dist import point_3d_line_distance
 from ros_3d_pointing_detection.calc_3d_dist import point_plane_distance
@@ -21,7 +21,7 @@ class PointingDetector3D(object):
     def __init__(self):
         rospy.init_node('3d_pointing_detector')
 
-        self._persons_sub = message_filters.Subscriber("~persons", Persons)
+        self._persons_sub = message_filters.Subscriber("~persons", PeoplePoseArray)
         self._objects_sub = message_filters.Subscriber("~objects", BoundingBoxArray)
         self._sub = message_filters.ApproximateTimeSynchronizer(
             [self._persons_sub, self._objects_sub], 10, 1)
@@ -32,10 +32,10 @@ class PointingDetector3D(object):
         self.__result_pub = rospy.Publisher('~result', ClassificationResult, queue_size=10)
 
     def _callback(self, persons_msg, objects_msg):
-        if not persons_msg.persons:
+        if not persons_msg.poses:
             return
 
-        right_arm_joints = self.right_arm_joints(persons_msg.persons[0])
+        right_arm_joints = self.right_arm_joints(persons_msg.poses[0])
 
         if right_arm_joints is None:
             rospy.loginfo("not found right arm")
@@ -106,16 +106,16 @@ class PointingDetector3D(object):
 
     def right_arm_joints(self, person):
         p0 = p1 = p2 = None
-        for part in person.body_part:
-            if part.part_id == 2:
-                p0 = np.array([part.x, part.y, part.z])
-            elif part.part_id == 3:
-                p1 = np.array([part.x, part.y, part.z])
-            elif part.part_id == 4:
-                p2 = np.array([part.x, part.y, part.z])
-        if p0 is None or p1 is None or p2 is None:
+        try:
+            pose = person.poses[person.limb_names.index('right_shoulder')]
+            p0 = np.array([pose.position.x, pose.position.y, pose.position.z])
+            pose = person.poses[person.limb_names.index('right_elbow')]
+            p1 = np.array([pose.position.x, pose.position.y, pose.position.z])
+            pose = person.poses[person.limb_names.index('right_wrist')]
+            p2 = np.array([pose.position.x, pose.position.y, pose.position.z])
+            return (p0, p1, p2)
+        except BaseException:
             return None
-        return (p0, p1, p2)
 
     def is_arm_stretched(self, right_arm_joints, angle_thresh=30.0):
         vec1 = np.array(right_arm_joints[1] - right_arm_joints[0])
