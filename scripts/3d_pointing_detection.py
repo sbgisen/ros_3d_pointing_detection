@@ -32,10 +32,11 @@ class PointingDetector3D(object):
         self.__result_pub = rospy.Publisher('~result', ClassificationResult, queue_size=10)
 
     def _callback(self, persons_msg, objects_msg):
-        if not persons_msg.poses:
+        person = self.nearest_person(persons_msg)
+        if person is None:
             return
 
-        right_arm_joints = self.right_arm_joints(persons_msg.poses[0])
+        right_arm_joints = self.right_arm_joints(person)
 
         if right_arm_joints is None:
             rospy.loginfo("not found right arm")
@@ -94,6 +95,21 @@ class PointingDetector3D(object):
                     dimensions=min_box.dimensions))
 
         self.__result_pub.publish(result)
+
+    def nearest_person(self, persons):
+        nearest = None
+        min_dist = 5
+        for poses in persons.poses:
+            try:
+                pose = poses.poses[poses.limb_names.index('right_shoulder')]
+                p = np.array([pose.position.x, pose.position.y, pose.position.z])
+                dist = np.linalg.norm(p)
+                if dist < min_dist:
+                    nearest = poses
+                    min_dist = dist
+            except BaseException:
+                pass
+        return nearest
 
     def closest_point(self, p, a, b):
         s = b - a
